@@ -1,0 +1,48 @@
+Nume: Ghenea Iustina
+Grupa: 332CC
+
+========================== TEMA 5 - SO ===============================
+
+** Am creat o structura pentru care am initializat cu 0 toate variabilele numerice.
+
+** Comunicarea client server este una nonblocanta, realizata cu ajutorul socketilor 
+   nonblocanti.
+   Pentru a crea o noua conexiune se foloseste functia fcntl, cu flagurile:
+	fcntl(sockfd, F_GETFL, 0)
+	si O_NONBLOCK.
+
+** In functia handle_client_request:
+	Se apeleaza functia receive_request, si se asteapta primirea unei stari care
+	semnifica faptul ca datele au fost primite (STATE_DATA_RECEIVED). Daca starea
+	asteptata a fost confirmata, se compara calea cu cea salvata in request_path:
+		=> daca nu este valida sau nu are un prefix valid, atunci number_cases = 0
+		=> daca prefixul este al directorului static, atunci number_cases = 1
+		=> daca prefixul este al directorului dinamic, atunci number_cases = 2.
+** In functia send_file_aio:
+	Se aloca nu numar de buffere astfel incat sa fie acoperita dimensiunea fisierului.
+	Fiecare buffer citeste in mod asincron folosind apelul io_prep_pread, si apoi 
+	cu functia io_submit pune un anumit segment din fisier. Daca s-a realizat cu succes,
+	se trece din states 1 in 2.
+
+In functia main se trateaza fiecare caz posibil, dupa cum urmeaza:
+	La inceput, number_case = 0, ceea ce inseamna ca daca un client trimite o cerere,
+	serverul apeleaza functia handle_client_request care repune socketul in epoll cu
+	flagul POLLOUT.
+	Daca se primeste notificare de POLLOUT se verifica number_cases:
+		=> se inchide conexiunea cu mesaj de eroare, daca number_cases = 0
+		=> (static) se trimite header-ul si se trece in state = 1, unde folosind 
+		   functia sendfile trimit blocuri de BUFSIZ octeti cat timp exista, si apoi
+		   se incheie conexiunea, daca number_cases = 1
+		   (dinamic) se trimite header-ul si se trece in states = 1, unde se apeleaza
+		   functia send_file_aio care face trecerea in states = 2, unde se trimite
+		   urmatorul buffer in care citirea a fost finalizata.
+	Cand numarul de buffere trimise atinge numarul total de buffere, se incheie conexiunea.
+
+** Pt fisierele dinamice datele sunt trimise in mod asincron.
+   Cu ajutorul lui epoll se primesc notificari care stabilesc daca transmisia pe
+   socketi este posibila sau daca s-au terminat de efectuat toate operatiile asincrone.
+
+** Pentru fisierele statice se foloseste API-ul de zero-copying, astfel trimitandu-se
+   in mod nonblocant din kernel.
+
+
